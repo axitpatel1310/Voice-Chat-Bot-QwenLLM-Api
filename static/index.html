@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold mb-4 text-center">Voice Assistant</h1>
+        <div class="mb-4">
+            <button id="startBtn" class="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Start Listening</button>
+            <button id="stopBtn" class="w-full bg-red-500 text-white p-2 rounded hover:bg-red-600 mt-2 hidden">Stop Listening</button>
+        </div>
+        <div id="status" class="text-gray-600 mb-4"></div>
+        <div id="inputText" class="bg-gray-100 p-4 rounded mb-4"></div>
+        <div id="responseText" class="bg-gray-100 p-4 rounded"></div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const inputText = document.getElementById('inputText');
+        const responseText = document.getElementById('responseText');
+
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        const synth = window.speechSynthesis;
+
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            synth.speak(utterance);
+        }
+
+        startBtn.addEventListener('click', () => {
+            recognition.start();
+            startBtn.classList.add('hidden');
+            stopBtn.classList.remove('hidden');
+            status.textContent = 'Listening... (say "exit" or "quit" to stop)';
+        });
+
+        stopBtn.addEventListener('click', () => {
+            recognition.stop();
+            startBtn.classList.remove('hidden');
+            stopBtn.classList.add('hidden');
+            status.textContent = '';
+        });
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            inputText.textContent = `You said: ${transcript}`;
+            
+            if (transcript.toLowerCase() === 'exit' || transcript.toLowerCase() === 'quit') {
+                speak('Exiting...');
+                recognition.stop();
+                startBtn.classList.remove('hidden');
+                stopBtn.classList.add('hidden');
+                status.textContent = 'Exiting...';
+                return;
+            }
+
+            fetch('/api/ask', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: transcript })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    responseText.textContent = data.error;
+                    speak(data.error);
+                } else {
+                    responseText.textContent = data.response;
+                    speak(data.response);
+                }
+            })
+            .catch(error => {
+                responseText.textContent = `Error: ${error.message}`;
+                speak(`Error: ${error.message}`);
+            });
+        };
+
+        recognition.onerror = (event) => {
+            status.textContent = `Error: ${event.error}`;
+            speak(`Error: ${event.error}`);
+            startBtn.classList.remove('hidden');
+            stopBtn.classList.add('hidden');
+        };
+
+        recognition.onend = () => {
+            if (!stopBtn.classList.contains('hidden')) {
+                recognition.start(); // Keep listening until stopped
+            }
+        };
+    </script>
+</body>
+</html>
